@@ -11,7 +11,7 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    
+
 ]
 
 [tool.poetry]
@@ -25,6 +25,7 @@ isort = "^7.0.0"
 pre-commit = "^4.3.0"
 pytest = "^8.4.2"
 pytest-cov = "^7.0.0"
+pylint = "^4.0.2"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
