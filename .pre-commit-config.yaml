@@ -1,0 +1,32 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+  - repo: local
+    hooks:
+      - id: poetry-black
+        name: Format Python code with Black
+        entry: poetry run black
+        language: system
+        types: [python]
+      - id: poetry-isort
+        name: Sort imports with isort
+        entry: poetry run isort
+        language: system
+        types: [python]
+      - id: poetry-pytest-coverage
+        name: Run pytest
+        entry: poetry run python -m coverage run -m pytest -q --disable-warnings
+        language: system
+        files: ""
+        pass_filenames: false
+        always_run: true
+      - id: pylint
+        name: Lint Python code with Pylint
+        entry: poetry run pylint
+        language: system
+        types: [python]
+        args: ["--fail-under=7.5"]

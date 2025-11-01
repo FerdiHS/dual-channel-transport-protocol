@@ -1,0 +1,32 @@
+[project]
+name = "dual-channel-transport-protocol"
+version = "0.1.0"
+description = "Hybrid two-channel transport for games: reliable (in-order) + unreliable (low-latency) over UDP, with SR+SACK. This program is dedicated as submission for Assignment 4 CS3103."
+authors = [
+    {name = "Andrew Daniel Janong"},
+    {name = "Angky Akdi Frandy Putrakelana"},
+    {name = "Ferdinand Halim Santoso"},
+    {name = "Hwang Qi Zhen"}
+]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+
+]
+
+[tool.poetry]
+name = "dctp"
+version = "0.0.1"
+packages = [{ include = "dctp", from = "src" }]
+
+[tool.poetry.group.dev.dependencies]
+black = "^25.9.0"
+isort = "^7.0.0"
+pre-commit = "^4.3.0"
+pytest = "^8.4.2"
+pytest-cov = "^7.0.0"
+pylint = "^4.0.2"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
