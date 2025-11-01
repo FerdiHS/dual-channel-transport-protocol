@@ -15,9 +15,9 @@ dependencies = [
 ]
 
 [tool.poetry]
-name = "ahtp"
+name = "dhcp"
 version = "0.0.1"
-packages = [{ include = "ahtp", from = "src" }]
+packages = [{ include = "dhcp", from = "src" }]
 
 [tool.poetry.group.dev.dependencies]
 black = "^25.9.0"
