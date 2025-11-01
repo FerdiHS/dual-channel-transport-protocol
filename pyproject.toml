@@ -15,9 +15,9 @@ dependencies = [
 ]
 
 [tool.poetry]
-name = "dhcp"
+name = "dctp"
 version = "0.0.1"
-packages = [{ include = "dhcp", from = "src" }]
+packages = [{ include = "dctp", from = "src" }]
 
 [tool.poetry.group.dev.dependencies]
 black = "^25.9.0"
