@@ -102,9 +102,7 @@ class Packet:
             _u32("ts_echo", self.ts_echo)
 
             if len(self.sack) > MAX_SACK_BLOCKS:
-                raise ValueError(
-                    f"too many SACK blocks: {len(self.sack)} > {MAX_SACK_BLOCKS}"
-                )
+                raise ValueError(f"too many SACK blocks: {len(self.sack)} > {MAX_SACK_BLOCKS}")
 
             for i, (start, end) in enumerate(self.sack):
                 _u32(f"sack[{i}].start", start)
@@ -189,9 +187,7 @@ class Packet:
                 raise ValueError("SACK frame must have len == 0")
 
             _require_at_least(frame, offs, SACK_HDR_LEN, "SACK header")
-            block_cnt, reserved = struct.unpack(
-                SACK_HDR_FMT, frame[offs : offs + SACK_HDR_LEN]
-            )
+            block_cnt, reserved = struct.unpack(SACK_HDR_FMT, frame[offs : offs + SACK_HDR_LEN])
             if reserved != 0:
                 raise ValueError("SACK reserved byte must be 0")
             extras += frame[offs : offs + SACK_HDR_LEN]
@@ -199,16 +195,12 @@ class Packet:
             extras_len += SACK_HDR_LEN
 
             if block_cnt > MAX_SACK_BLOCKS:
-                raise ValueError(
-                    f"SACK block_cnt too large: {block_cnt} > {MAX_SACK_BLOCKS}"
-                )
+                raise ValueError(f"SACK block_cnt too large: {block_cnt} > {MAX_SACK_BLOCKS}")
 
             need = block_cnt * 8
             _require_at_least(frame, offs, need, "SACK blocks")
             for i in range(block_cnt):
-                start, end = struct.unpack(
-                    "!II", frame[offs + 8 * i : offs + 8 * (i + 1)]
-                )
+                start, end = struct.unpack("!II", frame[offs + 8 * i : offs + 8 * (i + 1)])
                 if not (start < end):
                     raise ValueError(f"SACK block {i} invalid range: [{start}, {end})")
                 sack_blocks.append(SackBlock(start, end))
@@ -230,9 +222,7 @@ class Packet:
 
         payload = frame[-length:] if length else b""
 
-        base_wo_ck = struct.pack(
-            BASE_FMT, typ_u8, channel_type_int, seq, ts_send, length, 0
-        )
+        base_wo_ck = struct.pack(BASE_FMT, typ_u8, channel_type_int, seq, ts_send, length, 0)
         expected_ck = _checksum(base_wo_ck + extras + payload)
         if ck != expected_ck:
             raise ValueError("checksum mismatch")
