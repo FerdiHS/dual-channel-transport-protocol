@@ -17,7 +17,11 @@ dependencies = [
 [tool.poetry]
 name = "dctp"
 version = "0.0.1"
-packages = [{ include = "dctp", from = "src" }]
+packages = [
+  { include = "dctp",  from = "src" },
+  { include = "cli",   from = "src" },
+  { include = "utils", from = "src" }
+]
 
 [tool.poetry.group.dev.dependencies]
 black = "^25.9.0"
@@ -26,6 +30,10 @@ pre-commit = "^4.3.0"
 pytest = "^8.4.2"
 pytest-cov = "^7.0.0"
 pylint = "^4.0.2"
+
+[tool.poetry.scripts]
+dctp-send = "cli.send:main"
+dctp-recv = "cli.receive:main"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
