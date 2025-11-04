@@ -1,0 +1,11 @@
+# utils/time.py (or top of sender.py if you prefer)
+import time
+
+def monotonic_ms() -> int:
+    """
+    Monotonic clock in milliseconds
+
+    Returns:
+        int: The current monotonic time in milliseconds.
+    """
+    return int(time.monotonic() * 1000)
