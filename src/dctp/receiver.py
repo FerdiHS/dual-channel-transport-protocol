@@ -22,6 +22,7 @@ class Receiver:
     Attributes:
         rcv_nxt:   next in-order byte expected (cumulative ack point)
         wnd_bytes: advertised receive window (bytes)
+        sack_enabled: whether SACK is enabled
     """
 
     rcv_nxt: int = 0

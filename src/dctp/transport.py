@@ -25,6 +25,8 @@ class Transport:
 
     Attributes:
         mtu (int): Maximum Transmission Unit.
+        verbose (bool): Verbose logging flag.
+        sack_enabled (bool): Whether SACK is enabled.
         sender (Sender): The sender instance.
         receiver (Receiver): The receiver instance.
 
