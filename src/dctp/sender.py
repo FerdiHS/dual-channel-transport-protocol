@@ -9,16 +9,18 @@ Classes:
 
 from __future__ import annotations
 
+import random
+from collections import deque
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional
-from collections import deque
-import random
 
-from .types import PacketType, ChannelType
-from .packet import Packet
 from utils.time import monotonic_ms
 
+from .packet import Packet
+from .types import ChannelType, PacketType
+
 MAXIMUM_RTO_MS = 8000
+
 
 @dataclass
 class _Seg:
@@ -33,6 +35,7 @@ class _Seg:
     retx_count: number of retransmissions already done
     rto_ms:     current RTO for this segment (ms)
     """
+
     seq: int
     end: int
     payload: bytes
@@ -51,6 +54,7 @@ class Sender:
         win:              Sender's sliding window size (bytes).
         now_ms:          Callable returning current monotonic time in milliseconds.
         prob_reliable:    Probability of sending a segment over the reliable channel.
+        sack_enabled:    True if SACK processing is enabled.
         inflight:        Map of sequence number to _Seg for all segments in flight.
         bytes_inflight:  Total number of unacknowledged bytes in flight.
         srtt:            Smoothed RTT estimate (ms).
@@ -88,6 +92,7 @@ class Sender:
         window: int,
         now_ms: Optional[Callable[[], int]] = None,
         prob_reliable: float = 1.0,
+        sack_enabled: bool = True,
         rng: Optional[random.Random] = None,
     ):
         self.mss = int(mss)
@@ -95,6 +100,7 @@ class Sender:
         self.now_ms = now_ms or monotonic_ms
 
         self.prob_reliable = max(0.0, min(1.0, float(prob_reliable)))
+        self.sack_enabled = bool(sack_enabled)
         self._rng = rng or random.Random()
 
         self.base_seq: int = 0
@@ -116,7 +122,7 @@ class Sender:
         self.retx_total: int = 0
         self.sent_rel_segments: int = 0
         self.sent_unrel_segments: int = 0
-    
+
     def offer(self, data: bytes) -> int:
         """
         Accept as much as fits the window, segment to MSS, enqueue into inflight.
@@ -170,7 +176,7 @@ class Sender:
                 continue
 
             if first_send:
-                use_rel = (self._rng.random() < self.prob_reliable)
+                use_rel = self._rng.random() < self.prob_reliable
                 chan = ChannelType.RELIABLE if use_rel else ChannelType.UNRELIABLE
                 if use_rel:
                     self.sent_rel_segments += 1
@@ -225,7 +231,7 @@ class Sender:
         self._ack_up_to(pkt.ack)
 
         # Selective ACK blocks
-        if pkt.typ == PacketType.SACK:
+        if pkt.typ == PacketType.SACK and self.sack_enabled:
             for blk in pkt.sack:
                 self._ack_range(blk.start, blk.end)
 
@@ -240,7 +246,7 @@ class Sender:
     def _ack_up_to(self, up_to: int) -> None:
         """
         Mark all segments with end <= up_to as acked.
-        
+
         Args:
             up_to (int): The byte offset up to which segments should be marked as acked.
 
@@ -254,7 +260,7 @@ class Sender:
     def _ack_range(self, start: int, end: int) -> None:
         """
         Mark all segments that overlap [start, end) as acked.
-        
+
         Args:
             start (int): The start of the byte range (inclusive).
             end (int): The end of the byte range (exclusive).
@@ -272,10 +278,10 @@ class Sender:
     def _maybe_update_rtt(self, ts_echo: int) -> None:
         """
         Update SRTT/RTTVAR from a clean RTT sample.
-        
+
         Args:
             ts_echo (int): The echoed timestamp from the feedback packet.
-        
+
         Returns:
             None
         """
@@ -285,7 +291,7 @@ class Sender:
         for seg in self.inflight.values():
             if seg.sent_ts == ts_echo and seg.retx_count == 0:
                 sample = max(self.now_ms() - ts_echo, 1)
-                
+
                 self.rtt_cnt += 1
                 self.rtt_sum += sample
                 self.rtt_min = sample if self.rtt_min is None else min(self.rtt_min, sample)
@@ -299,14 +305,12 @@ class Sender:
                     alpha, beta = 1 / 8, 1 / 4
                     self.rttvar = (1 - beta) * self.rttvar + beta * abs(self.srtt - sample)
                     self.srtt = (1 - alpha) * self.srtt + alpha * sample
-                
 
                 rto = self.current_rto()
                 for s in self.inflight.values():
                     if s.retx_count == 0:
                         s.rto_ms = rto
                 break
-    
 
     def inflight_bytes(self) -> int:
         """
@@ -320,7 +324,7 @@ class Sender:
     def has_unacked(self) -> bool:
         """
         True if there are still reliable bytes awaiting ACK/SACK.
-        
+
         Returns:
             bool: True if there are unacknowledged bytes in flight.
         """
@@ -329,21 +333,21 @@ class Sender:
     def current_rto(self) -> int:
         """
         Return the sender's current RTO (ms) based on SRTT/RTTVAR.
-        
+
         Returns:
             int: The current RTO in milliseconds.
         """
         if self.srtt is None:
             return self.default_rto
         var = self.rttvar or 0.0
-        
+
         rto = self.srtt + max(4.0 * var, 1.0)
         return max(int(rto), self.min_rto)
 
     def metrics(self) -> dict:
         """
         Return a snapshot of sender metrics (RTT/RTO and counters).
-        
+
         Returns:
             dict: A dictionary of sender metrics.
         """
@@ -362,7 +366,7 @@ class Sender:
             "segments_sent_reliable": self.sent_rel_segments,
             "segments_sent_unreliable": self.sent_unrel_segments,
         }
-    
+
     def get_inflight_segments(self) -> List[_Seg]:
         """
         Return a list of all segments currently in flight.
