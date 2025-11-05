@@ -94,6 +94,7 @@ class Sender:
         now_ms: Optional[Callable[[], int]] = None,
         prob_reliable: float = 1.0,
         sack_enabled: bool = True,
+        verbose: bool = False,
         rng: Optional[random.Random] = None,
     ):
         self.mss = int(mss)
@@ -102,6 +103,7 @@ class Sender:
 
         self.prob_reliable = max(0.0, min(1.0, float(prob_reliable)))
         self.sack_enabled = bool(sack_enabled)
+        self.verbose = bool(verbose)
         self._rng = rng or random.Random()
 
         self.base_seq: Dict[ChannelType, int] = {
@@ -186,6 +188,7 @@ class Sender:
         for seg in self.inflight[ChannelType.UNRELIABLE].values():
             if seg.acked:
                 continue
+            first_send = seg.sent_ts == 0
             if first_send:
                 self.sent_unrel_segments += 1
             else:
@@ -204,6 +207,10 @@ class Sender:
             out.append(pkt)
 
             seg.acked = True
+            self._print(
+                f"{'RETX' if not first_send else 'TX  '} | ch={seg.chan.name} | "
+                f"seq={seg.seq} len={len(seg.payload)} rto={seg.rto_ms}ms"
+            )
 
         # Iterate the reliable channel
         for seg in sorted(self.inflight[ChannelType.RELIABLE].values(), key=lambda s: s.seq):
@@ -231,6 +238,10 @@ class Sender:
             )
             seg.sent_ts = now
             out.append(pkt)
+            self._print(
+                f"{'RETX' if not first_send else 'TX  '} | ch={seg.chan.name} | "
+                f"seq={seg.seq} len={len(seg.payload)} rto={seg.rto_ms}ms"
+            )
 
         if to_free:
             freed = 0
@@ -344,6 +355,19 @@ class Sender:
                     if s.retx_count == 0:
                         s.rto_ms = rto
                 break
+
+    def _print(self, msg: str) -> None:
+        """
+        Print a debug message prefixed with [Sender].
+
+        Args:
+            msg (str): The message to print.
+
+        Returns:
+            None
+        """
+        if self.verbose:
+            print(f"[Sender] {msg}")
 
     def inflight_bytes(self) -> int:
         """

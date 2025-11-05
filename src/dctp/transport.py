@@ -53,8 +53,11 @@ class Transport:
             window=window,
             prob_reliable=prob_reliable,
             sack_enabled=sack_enabled,
+            verbose=self.verbose,
         )
-        self.receiver = Receiver(wnd_bytes=window, sack_enabled=self.sack_enabled)
+        self.receiver = Receiver(
+            wnd_bytes=window, sack_enabled=self.sack_enabled, verbose=self.verbose
+        )
 
         self._sock = None
         self._peer = None

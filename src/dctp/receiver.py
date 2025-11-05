@@ -28,6 +28,7 @@ class Receiver:
     rcv_nxt: int = 0
     wnd_bytes: int = 64 * 1024 - 1
     sack_enabled: bool = True
+    verbose: bool = False
     _buf: Dict[int, bytes] = field(default_factory=dict)
     _delivered: bytearray = field(default_factory=bytearray)
 
@@ -45,10 +46,11 @@ class Receiver:
         if pkt.typ != PacketType.DATA:
             raise ValueError("Receiver.on_data expects DATA packets")
 
-        print(
-            f"[Receiver] Got DATA packet | seq={pkt.seq} | len={len(pkt.payload or b'')} | "
+        self._print(
+            f"Got DATA packet | seq={pkt.seq} | len={len(pkt.payload or b'')} | "
             f"ch={pkt.channel_type.name} | ts={pkt.ts_send} | msg={pkt.payload or b''}"
         )
+
         if pkt.channel_type == ChannelType.UNRELIABLE:
             if pkt.payload:
                 self._delivered.extend(pkt.payload)
@@ -56,6 +58,9 @@ class Receiver:
 
         seq = pkt.seq
         pay = pkt.payload or b""
+
+        if seq > self.rcv_nxt:
+            self._print(f"OUT-OF-ORDER: got [{seq},{seq+len(pay)}) expecting {self.rcv_nxt}")
 
         # Duplicate entirely before rcv_nxt
         if seq + len(pay) <= self.rcv_nxt:
@@ -178,3 +183,16 @@ class Receiver:
 
         cap = min(limit, Packet.MAX_SACK_BLOCKS)
         return merged[:cap]
+
+    def _print(self, msg: str) -> None:
+        """
+        Print a verbose message if verbosity is enabled.
+
+        Args:
+            msg (str): The message to print.
+
+        Returns:
+            None
+        """
+        if self.verbose:
+            print(f"[Receiver] {msg}")
