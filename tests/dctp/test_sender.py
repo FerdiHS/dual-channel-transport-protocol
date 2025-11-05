@@ -6,7 +6,7 @@ import time
 
 from dctp.packet import Packet
 from dctp.sender import Sender
-from dctp.types import PacketType, SackBlock
+from dctp.types import ChannelType, PacketType, SackBlock
 
 
 def fake_clock() -> int:
@@ -50,7 +50,7 @@ def test_ack_marks_acked_and_slides_window() -> None:
 
     a = Packet(
         typ=PacketType.ACK,
-        channel_type=0,
+        channel_type=ChannelType.RELIABLE,
         seq=0,
         ts_send=0,
         ack=100,
@@ -77,7 +77,7 @@ def test_sack_marks_higher_ranges() -> None:
 
     sa = Packet(
         typ=PacketType.SACK,
-        channel_type=0,
+        channel_type=ChannelType.RELIABLE,
         seq=0,
         ts_send=0,
         ack=0,
@@ -90,7 +90,7 @@ def test_sack_marks_higher_ranges() -> None:
     sa.sack = [SackBlock(*x) for x in sa.sack]
     s.on_feedback(sa)
 
-    for seg in s.inflight.values():
+    for seg in s.inflight[ChannelType.RELIABLE].values():
         if seg.seq >= 200:
             assert seg.acked
         else:

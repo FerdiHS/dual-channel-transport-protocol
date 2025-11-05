@@ -30,6 +30,7 @@ class _Seg:
     seq:        first byte offset of this segment in the stream
     end:        one-past-last byte offset
     payload:    the bytes to send
+    chan:       ChannelType used for last transmission
     sent_ts:    last transmission monotonic timestamp (ms) or 0 if never sent
     acked:      True iff fully acknowledged (or retired for unreliable)
     retx_count: number of retransmissions already done
@@ -39,6 +40,7 @@ class _Seg:
     seq: int
     end: int
     payload: bytes
+    chan: ChannelType = ChannelType.RELIABLE
     sent_ts: int = 0
     acked: bool = False
     retx_count: int = 0
@@ -55,7 +57,6 @@ class Sender:
         now_ms:          Callable returning current monotonic time in milliseconds.
         prob_reliable:    Probability of sending a segment over the reliable channel.
         sack_enabled:    True if SACK processing is enabled.
-        inflight:        Map of sequence number to _Seg for all segments in flight.
         bytes_inflight:  Total number of unacknowledged bytes in flight.
         srtt:            Smoothed RTT estimate (ms).
         rttvar:          RTT variance estimate (ms).
@@ -103,9 +104,18 @@ class Sender:
         self.sack_enabled = bool(sack_enabled)
         self._rng = rng or random.Random()
 
-        self.base_seq: int = 0
-        self.next_seq: int = 0
-        self.inflight: Dict[int, _Seg] = {}
+        self.base_seq: Dict[ChannelType, int] = {
+            ChannelType.RELIABLE: 0,
+            ChannelType.UNRELIABLE: 0,
+        }
+        self.next_seq: Dict[ChannelType, int] = {
+            ChannelType.RELIABLE: 0,
+            ChannelType.UNRELIABLE: 0,
+        }
+        self.inflight: Dict[ChannelType, Dict[int, _Seg]] = {
+            ChannelType.RELIABLE: {},
+            ChannelType.UNRELIABLE: {},
+        }
         self.bytes_inflight: int = 0
 
         self.srtt: Optional[float] = None
@@ -145,9 +155,16 @@ class Sender:
         while off < take:
             end = min(off + self.mss, take)
             chunk = data[off:end]
-            seg = _Seg(seq=self.next_seq, end=self.next_seq + len(chunk), payload=chunk)
-            self.inflight[seg.seq] = seg
-            self.next_seq = seg.end
+            use_rel = self._rng.random() < self.prob_reliable
+            chan = ChannelType.RELIABLE if use_rel else ChannelType.UNRELIABLE
+            seg = _Seg(
+                seq=self.next_seq[chan],
+                end=self.next_seq[chan] + len(chunk),
+                chan=chan,
+                payload=chunk,
+            )
+            self.inflight[chan][seg.seq] = seg
+            self.next_seq[chan] = seg.end
             self.bytes_inflight += len(chunk)
             off = end
         return take
@@ -165,8 +182,31 @@ class Sender:
         out: List[Packet] = []
         to_free: List[int] = []
 
-        # Iterate in sequence order for nicer pacing
-        for seg in sorted(self.inflight.values(), key=lambda s: s.seq):
+        # Iterate the unreliable channel
+        for seg in self.inflight[ChannelType.UNRELIABLE].values():
+            if seg.acked:
+                continue
+            if first_send:
+                self.sent_unrel_segments += 1
+            else:
+                seg.retx_count += 1
+                self.retx_total += 1
+                seg.rto_ms = min(seg.rto_ms * 2, MAXIMUM_RTO_MS)
+
+            pkt = Packet(
+                typ=PacketType.DATA,
+                channel_type=seg.chan,
+                seq=seg.seq,
+                ts_send=now,
+                payload=seg.payload,
+            )
+            seg.sent_ts = now
+            out.append(pkt)
+
+            seg.acked = True
+
+        # Iterate the reliable channel
+        for seg in sorted(self.inflight[ChannelType.RELIABLE].values(), key=lambda s: s.seq):
             if seg.acked:
                 continue
 
@@ -176,22 +216,15 @@ class Sender:
                 continue
 
             if first_send:
-                use_rel = self._rng.random() < self.prob_reliable
-                chan = ChannelType.RELIABLE if use_rel else ChannelType.UNRELIABLE
-                if use_rel:
-                    self.sent_rel_segments += 1
-                else:
-                    self.sent_unrel_segments += 1
+                self.sent_rel_segments += 1
             else:
-                use_rel = True
-                chan = ChannelType.RELIABLE
                 seg.retx_count += 1
                 self.retx_total += 1
                 seg.rto_ms = min(seg.rto_ms * 2, MAXIMUM_RTO_MS)
 
             pkt = Packet(
                 typ=PacketType.DATA,
-                channel_type=chan,
+                channel_type=seg.chan,
                 seq=seg.seq,
                 ts_send=now,
                 payload=seg.payload,
@@ -199,16 +232,16 @@ class Sender:
             seg.sent_ts = now
             out.append(pkt)
 
-            if not use_rel:
-                seg.acked = True
-                to_free.append(seg.seq)
-
         if to_free:
             freed = 0
             for s in to_free:
-                freed += len(self.inflight[s].payload)
-                del self.inflight[s]
+                freed += len(self.inflight[ChannelType.RELIABLE][s].payload)
+                del self.inflight[ChannelType.RELIABLE][s]
             self.bytes_inflight = max(self.bytes_inflight - freed, 0)
+
+        for s in to_free:
+            freed += len(self.inflight[ChannelType.UNRELIABLE][s].payload)
+            del self.inflight[ChannelType.UNRELIABLE][s]
 
         return out
 
@@ -237,10 +270,10 @@ class Sender:
 
         # Remove all acked segments and update byte count
         freed = 0
-        done = [s for s in self.inflight.values() if s.acked]
+        done = [s for s in self.inflight[ChannelType.RELIABLE].values() if s.acked]
         for seg in done:
             freed += len(seg.payload)
-            del self.inflight[seg.seq]
+            del self.inflight[ChannelType.RELIABLE][seg.seq]
         self.bytes_inflight = max(self.bytes_inflight - freed, 0)
 
     def _ack_up_to(self, up_to: int) -> None:
@@ -253,7 +286,7 @@ class Sender:
         Returns:
             None
         """
-        for seg in self.inflight.values():
+        for seg in self.inflight[ChannelType.RELIABLE].values():
             if seg.end <= up_to:
                 seg.acked = True
 
@@ -268,7 +301,7 @@ class Sender:
         Returns:
             None
         """
-        for seg in self.inflight.values():
+        for seg in self.inflight[ChannelType.RELIABLE].values():
             if seg.acked:
                 continue
             if seg.seq >= end or seg.end <= start:
@@ -288,7 +321,7 @@ class Sender:
         if ts_echo == 0:
             return
 
-        for seg in self.inflight.values():
+        for seg in self.inflight[ChannelType.RELIABLE].values():
             if seg.sent_ts == ts_echo and seg.retx_count == 0:
                 sample = max(self.now_ms() - ts_echo, 1)
 
@@ -307,7 +340,7 @@ class Sender:
                     self.srtt = (1 - alpha) * self.srtt + alpha * sample
 
                 rto = self.current_rto()
-                for s in self.inflight.values():
+                for s in self.inflight[ChannelType.RELIABLE].values():
                     if s.retx_count == 0:
                         s.rto_ms = rto
                 break
@@ -362,7 +395,9 @@ class Sender:
             "rtt_samples_ms_last": list(self._rtt_samples),
             "retransmits": self.retx_total,
             "inflight_bytes": self.bytes_inflight,
-            "segments_inflight": sum(1 for s in self.inflight.values() if not s.acked),
+            "segments_inflight": sum(
+                1 for s in self.inflight[ChannelType.RELIABLE].values() if not s.acked
+            ),
             "segments_sent_reliable": self.sent_rel_segments,
             "segments_sent_unreliable": self.sent_unrel_segments,
         }
@@ -374,4 +409,4 @@ class Sender:
         Returns:
             List[_Seg]: The list of segments in flight.
         """
-        return list(self.inflight.values())
+        return list(self.inflight[ChannelType.RELIABLE].values())
