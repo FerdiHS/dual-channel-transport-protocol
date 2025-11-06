@@ -188,10 +188,16 @@ class Transport:
             "sacks_rx": self._sacks_rx,
         }
         # Attach sender metrics if available
+
         try:
             base["sender"] = self.sender.metrics()
         except Exception:
             base["sender"] = {}
+        try:
+            base["receiver"] = {"packet received": self.receiver.total_packets_received}
+        except Exception:
+            base["receiver"] = {}
+
         return base
 
     def _on_inbound_frame(self, raw: bytes, src):

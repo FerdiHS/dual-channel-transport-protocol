@@ -114,7 +114,6 @@ def main(argv: list[str] | None = None) -> int:
             if sender:
                 print("[dctp-send] sender metrics:", end=" ")
 
-                # Print all metrics in one line, except RTT samples list
                 parts = []
                 for k, v in sender.items():
                     if k == "rtt_samples_ms_last":
@@ -122,9 +121,6 @@ def main(argv: list[str] | None = None) -> int:
                     parts.append(f"{k}={v}")
                 print(", ".join(parts))
 
-                # Print RTT samples list on its own line
-                if "rtt_samples_ms_last" in sender:
-                    print("\n  rtt_samples_ms_last:", sender["rtt_samples_ms_last"])
 
         except Exception:
             pass

@@ -135,6 +135,14 @@ class Sender:
         self.sent_rel_segments: int = 0
         self.sent_unrel_segments: int = 0
 
+        self.start_time_ms: Optional[int] = None
+        self.end_time_ms: Optional[int] = None
+        self.total_packets_sent: int = 0
+        self.total_packets_received: int = 0
+        self.total_bytes_sent: int = 0
+
+
+
     def offer(self, data: bytes) -> int:
         """
         Accept as much as fits the window, segment to MSS, enqueue into inflight.
@@ -206,6 +214,13 @@ class Sender:
             seg.sent_ts = now
             out.append(pkt)
 
+            if self.start_time_ms is None:
+                self.start_time_ms = now
+            self.end_time_ms = now
+            self.total_packets_sent += 1
+            self.total_bytes_sent += len(seg.payload)
+
+
             seg.acked = True
             self._print(
                 f"{'RETX' if not first_send else 'TX  '} | ch={seg.chan.name} | "
@@ -238,6 +253,13 @@ class Sender:
             )
             seg.sent_ts = now
             out.append(pkt)
+
+            if self.start_time_ms is None:
+                self.start_time_ms = now
+            self.end_time_ms = now
+            self.total_packets_sent += 1
+            self.total_bytes_sent += len(seg.payload)
+
             self._print(
                 f"{'RETX' if not first_send else 'TX  '} | ch={seg.chan.name} | "
                 f"seq={seg.seq} len={len(seg.payload)} rto={seg.rto_ms}ms"
@@ -286,6 +308,9 @@ class Sender:
             freed += len(seg.payload)
             del self.inflight[ChannelType.RELIABLE][seg.seq]
         self.bytes_inflight = max(self.bytes_inflight - freed, 0)
+
+        self.total_packets_received += len(done)
+
 
     def _ack_up_to(self, up_to: int) -> None:
         """
@@ -409,6 +434,12 @@ class Sender:
             dict: A dictionary of sender metrics.
         """
         avg = (self.rtt_sum / self.rtt_cnt) if self.rtt_cnt else None
+        throughput_bps = None
+        duration_s = 0.0
+        if self.start_time_ms is not None and self.end_time_ms is not None:
+            duration_s = max((self.end_time_ms - self.start_time_ms) / 1000.0, 1e-6)
+            throughput_bps = self.total_bytes_sent / duration_s
+
         return {
             "srtt_ms": int(self.srtt) if self.srtt is not None else None,
             "rttvar_ms": int(self.rttvar) if self.rttvar is not None else None,
@@ -424,6 +455,11 @@ class Sender:
             ),
             "segments_sent_reliable": self.sent_rel_segments,
             "segments_sent_unreliable": self.sent_unrel_segments,
+            "total_packets_sent": self.total_packets_sent,
+            "total_packets_received": self.total_packets_received,
+            "total_bytes_sent": self.total_bytes_sent,
+            "duration_s": round(duration_s, 3),
+            "throughput_bytes_per_sec": round(throughput_bps, 2) if throughput_bps else None,
         }
 
     def get_inflight_segments(self) -> List[_Seg]:

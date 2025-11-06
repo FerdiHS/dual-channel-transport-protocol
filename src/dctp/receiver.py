@@ -31,6 +31,8 @@ class Receiver:
     verbose: bool = False
     _buf: Dict[int, bytes] = field(default_factory=dict)
     _delivered: bytearray = field(default_factory=bytearray)
+    total_packets_received: int = 0  # total number of DATA packets received
+
 
     def on_data(self, pkt: Packet) -> Optional[Packet]:
         """
@@ -45,7 +47,7 @@ class Receiver:
         """
         if pkt.typ != PacketType.DATA:
             raise ValueError("Receiver.on_data expects DATA packets")
-
+        self.total_packets_received += 1
         self._print(
             f"Got DATA packet | seq={pkt.seq} | len={len(pkt.payload or b'')} | "
             f"ch={pkt.channel_type.name} | ts={pkt.ts_send} | msg={pkt.payload or b''}"
