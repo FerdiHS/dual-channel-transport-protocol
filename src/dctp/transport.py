@@ -5,18 +5,19 @@ Classes:
     Transport: A class that combines Sender and Receiver for DCTP.
 """
 
-from .sender import Sender
-from .receiver import Receiver
-from .types import PacketType
-from .packet import Packet
-
-import socket
 import select
+import socket
 from typing import Tuple
+
+from .packet import Packet
+from .receiver import Receiver
+from .sender import Sender
+from .types import PacketType
 
 DEFAULT_MTU = 1200
 DEFAULT_WINDOW = 64 * 1024 - 1
 DEFAULT_PROB_RELIABLE = 0.5
+
 
 class Transport:
     """
@@ -24,6 +25,8 @@ class Transport:
 
     Attributes:
         mtu (int): Maximum Transmission Unit.
+        verbose (bool): Verbose logging flag.
+        sack_enabled (bool): Whether SACK is enabled.
         sender (Sender): The sender instance.
         receiver (Receiver): The receiver instance.
 
@@ -33,22 +36,28 @@ class Transport:
         _flush_due() -> int:
             Flush due packets from the sender.
     """
+
     def __init__(
         self,
         mtu: int = DEFAULT_MTU,
         window: int = DEFAULT_WINDOW,
         prob_reliable: float = DEFAULT_PROB_RELIABLE,
+        sack_enabled: bool = True,
         verbose: bool = False,
     ):
         self.mtu = int(mtu)
         self.verbose = bool(verbose)
-
+        self.sack_enabled = bool(sack_enabled)
         self.sender = Sender(
             mss=self.mtu - Packet.BASE_LEN,
             window=window,
             prob_reliable=prob_reliable,
+            sack_enabled=sack_enabled,
+            verbose=self.verbose,
         )
-        self.receiver = Receiver(wnd_bytes=window)
+        self.receiver = Receiver(
+            wnd_bytes=window, sack_enabled=self.sack_enabled, verbose=self.verbose
+        )
 
         self._sock = None
         self._peer = None
@@ -62,7 +71,7 @@ class Transport:
         self._sacks_tx = 0
         self._sacks_rx = 0
 
-    def bind(self, addr: Tuple[str,int]) -> None:
+    def bind(self, addr: Tuple[str, int]) -> None:
         """
         Bind the transport to a local address.
 
@@ -75,9 +84,10 @@ class Transport:
         self._ensure_socket()
         assert self._sock is not None
         self._sock.bind(addr)
-        if self.verbose: print(f"[dctp] bind on {addr}")
+        if self.verbose:
+            print(f"[dctp] bind on {addr}")
 
-    def connect(self, addr: Tuple[str,int]) -> None:
+    def connect(self, addr: Tuple[str, int]) -> None:
         """
         Connect the transport to a remote address.
 
@@ -89,9 +99,9 @@ class Transport:
         """
         self._ensure_socket()
         self._peer = addr
-        if self.verbose: print(f"[dctp] connect → {addr}")
+        if self.verbose:
+            print(f"[dctp] connect → {addr}")
 
-    
     def send(self, data: bytes) -> int:
         """
         Send data through the transport.
@@ -129,15 +139,18 @@ class Transport:
             None
         """
         self._flush_due()
-        if not self._sock: return
-        r,_,_ = select.select([self._sock], [], [], max(timeout_ms,0)/1000.0)
-        if not r: return
+        if not self._sock:
+            return
+        r, _, _ = select.select([self._sock], [], [], max(timeout_ms, 0) / 1000.0)
+        if not r:
+            return
         while True:
             try:
                 raw, src = self._sock.recvfrom(65535)
             except (BlockingIOError, InterruptedError):
                 break
-            self._bytes_rx += len(raw); self._frames_rx += 1
+            self._bytes_rx += len(raw)
+            self._frames_rx += 1
             self._on_inbound(raw, src)
         self._flush_due()
 
@@ -159,7 +172,9 @@ class Transport:
         Returns:
             None
         """
-        if self._sock: self._sock.close(); self._sock = None
+        if self._sock:
+            self._sock.close()
+            self._sock = None
 
     def get_stats(self) -> dict:
         base = {
@@ -173,10 +188,16 @@ class Transport:
             "sacks_rx": self._sacks_rx,
         }
         # Attach sender metrics if available
+
         try:
             base["sender"] = self.sender.metrics()
         except Exception:
             base["sender"] = {}
+        try:
+            base["receiver"] = {"packet received": self.receiver.total_packets_received}
+        except Exception:
+            base["receiver"] = {}
+
         return base
 
     def _on_inbound_frame(self, raw: bytes, src):
@@ -201,12 +222,16 @@ class Transport:
             fb = self.receiver.on_data(pkt)
             if fb is not None:
                 self._send_pkt(fb, dst=src)
-                if fb.typ == PacketType.ACK:  self._acks_tx += 1
-                elif fb.typ == PacketType.SACK: self._sacks_tx += 1
+                if fb.typ == PacketType.ACK:
+                    self._acks_tx += 1
+                elif fb.typ == PacketType.SACK:
+                    self._sacks_tx += 1
         elif pkt.typ in (PacketType.ACK, PacketType.SACK):
             self.sender.on_feedback(pkt)
-            if pkt.typ == PacketType.ACK: self._acks_rx += 1
-            else: self._sacks_rx += 1
+            if pkt.typ == PacketType.ACK:
+                self._acks_rx += 1
+            else:
+                self._sacks_rx += 1
 
     def _flush_due(self) -> int:
         """
@@ -250,7 +275,8 @@ class Transport:
         assert self._sock is not None
         raw = pkt.to_bytes()
         self._sock.sendto(raw, dst)
-        self._bytes_tx += len(raw); self._frames_tx += 1
+        self._bytes_tx += len(raw)
+        self._frames_tx += 1
 
     def _on_inbound(self, raw: bytes, src) -> None:
         """
@@ -274,9 +300,13 @@ class Transport:
             fb = self.receiver.on_data(pkt)
             if fb is not None:
                 self._send_pkt(fb, dst=src)
-                if fb.typ == PacketType.ACK:  self._acks_tx += 1
-                elif fb.typ == PacketType.SACK: self._sacks_tx += 1
+                if fb.typ == PacketType.ACK:
+                    self._acks_tx += 1
+                elif fb.typ == PacketType.SACK:
+                    self._sacks_tx += 1
         elif pkt.typ in (PacketType.ACK, PacketType.SACK):
             self.sender.on_feedback(pkt)
-            if pkt.typ == PacketType.ACK: self._acks_rx += 1
-            else: self._sacks_rx += 1
+            if pkt.typ == PacketType.ACK:
+                self._acks_rx += 1
+            else:
+                self._sacks_rx += 1

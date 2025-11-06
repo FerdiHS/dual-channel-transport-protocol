@@ -2,7 +2,7 @@
 A command-line utility to receive a file using DCTP over UDP.
 
 Usage:
-    poetry run dctp-recv --listen 127.0.0.1:9001 --out out.bin -v
+    poetry run dctp-recv --listen 127.0.0.1:9001 --out out.bin -v --sack
 """
 
 from __future__ import annotations
@@ -47,6 +47,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="receive buffer/window (bytes)",
     )
     p.add_argument("-v", "--verbose", action="store_true", help="verbose logging")
+    g = p.add_mutually_exclusive_group()
+    g.add_argument("--sack", dest="sack", action="store_true", help="enable SACK (default)")
+    g.add_argument("--no-sack", dest="sack", action="store_false", help="disable SACK")
+    p.set_defaults(sack=True)
     return p
 
 
@@ -56,7 +60,9 @@ def main(argv: list[str] | None = None) -> int:
     out_path = os.path.abspath(args.out)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
-    t = Transport(window=args.buf_cap, prob_reliable=1.0, verbose=args.verbose)
+    t = Transport(
+        window=args.buf_cap, prob_reliable=1.0, sack_enabled=args.sack, verbose=args.verbose
+    )
     t.bind(args.listen)
 
     total = 0
