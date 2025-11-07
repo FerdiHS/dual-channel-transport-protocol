@@ -7,7 +7,9 @@ from dctp.receiver import Receiver
 from dctp.types import ChannelType, PacketType
 
 
-def mk_data(seq: int, s: bytes, channel_type: ChannelType = ChannelType.RELIABLE) -> Packet:
+def mk_data(
+    seq: int, s: bytes, channel_type: ChannelType = ChannelType.RELIABLE
+) -> Packet:
     """
     Create a DATA packet for testing.
 
@@ -19,7 +21,9 @@ def mk_data(seq: int, s: bytes, channel_type: ChannelType = ChannelType.RELIABLE
     Returns:
         Packet: The created DATA packet.
     """
-    return Packet(typ=PacketType.DATA, channel_type=channel_type, seq=seq, ts_send=111, payload=s)
+    return Packet(
+        typ=PacketType.DATA, channel_type=channel_type, seq=seq, ts_send=111, payload=s
+    )
 
 
 def test_unreliable_channel_data_is_ignored() -> None:

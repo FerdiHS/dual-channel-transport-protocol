@@ -33,7 +33,6 @@ class Receiver:
     _delivered: bytearray = field(default_factory=bytearray)
     total_packets_received: int = 0  # total number of DATA packets received
 
-
     def on_data(self, pkt: Packet) -> Optional[Packet]:
         """
         Process an incoming DATA packet and return an ACK/SACK packet as feedback.
@@ -62,7 +61,9 @@ class Receiver:
         pay = pkt.payload or b""
 
         if seq > self.rcv_nxt:
-            self._print(f"OUT-OF-ORDER: got [{seq},{seq+len(pay)}) expecting {self.rcv_nxt}")
+            self._print(
+                f"OUT-OF-ORDER: got [{seq},{seq+len(pay)}) expecting {self.rcv_nxt}"
+            )
 
         # Duplicate entirely before rcv_nxt
         if seq + len(pay) <= self.rcv_nxt:

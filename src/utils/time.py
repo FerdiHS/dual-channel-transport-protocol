@@ -1,3 +1,7 @@
+"""
+A module providing a monotonic clock in milliseconds.
+"""
+
 import time
 
 

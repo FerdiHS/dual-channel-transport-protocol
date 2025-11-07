@@ -37,6 +37,12 @@ def _addr(s: str) -> Tuple[str, int]:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """
+    Build the argument parser for DCTP receiver.
+
+    Returns:
+        An argparse.ArgumentParser instance configured for DCTP receiver.
+    """
     p = argparse.ArgumentParser(description="Receive DCTP over UDP.")
     p.add_argument("--listen", type=_addr, required=True, help="HOST:PORT to bind")
     p.add_argument("--out", type=str, required=True, help="output file path")
@@ -48,20 +54,34 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("-v", "--verbose", action="store_true", help="verbose logging")
     g = p.add_mutually_exclusive_group()
-    g.add_argument("--sack", dest="sack", action="store_true", help="enable SACK (default)")
+    g.add_argument(
+        "--sack", dest="sack", action="store_true", help="enable SACK (default)"
+    )
     g.add_argument("--no-sack", dest="sack", action="store_false", help="disable SACK")
     p.set_defaults(sack=True)
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
+    """
+    Main function for the DCTP receiver command-line utility.
+
+    Args:
+        argv: List of command-line arguments. If None, uses sys.argv.
+
+    Returns:
+        An integer exit code.
+    """
     args = build_parser().parse_args(argv)
 
     out_path = os.path.abspath(args.out)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     t = Transport(
-        window=args.buf_cap, prob_reliable=1.0, sack_enabled=args.sack, verbose=args.verbose
+        window=args.buf_cap,
+        prob_reliable=1.0,
+        sack_enabled=args.sack,
+        verbose=args.verbose,
     )
     t.bind(args.listen)
 
