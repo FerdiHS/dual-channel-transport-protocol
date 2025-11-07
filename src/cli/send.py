@@ -28,17 +28,26 @@ def _addr(s: str) -> Tuple[str, int]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build the argument parser for DCTP sender."""
+    """
+    Build the argument parser for DCTP sender.
+
+    Returns:
+        An argparse.ArgumentParser instance configured for DCTP sender.
+    """
     p = argparse.ArgumentParser(description="Send data using DCTP over UDP.")
     p.add_argument("--dst", type=_addr, required=True, help="destination HOST:PORT")
 
     # Send multiple packets
-    p.add_argument("--num-packets", type=int, help="number of packets to send (no file mode)")
+    p.add_argument(
+        "--num-packets", type=int, help="number of packets to send (no file mode)"
+    )
     p.add_argument("--rate", type=float, help="packets per second (no file mode)")
 
     # Transmission configuration
     p.add_argument("--win", type=int, default=64 * 1024, help="sender window (bytes)")
-    p.add_argument("--chunk", type=int, default=64 * 1024, help="read chunk size (bytes)")
+    p.add_argument(
+        "--chunk", type=int, default=64 * 1024, help="read chunk size (bytes)"
+    )
     p.add_argument(
         "--prob-reliable",
         type=float,
@@ -47,18 +56,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("-v", "--verbose", action="store_true", help="verbose logging")
     g = p.add_mutually_exclusive_group()
-    g.add_argument("--sack", dest="sack", action="store_true", help="enable SACK (default)")
+    g.add_argument(
+        "--sack", dest="sack", action="store_true", help="enable SACK (default)"
+    )
     g.add_argument("--no-sack", dest="sack", action="store_false", help="disable SACK")
     p.set_defaults(sack=True)
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
+    """
+    Main entry point for the DCTP sender CLI.
+
+    Args:
+        argv: List of command-line arguments. If None, uses sys.argv.
+
+    Returns:
+        Exit code (0 for success, non-zero for failure).
+    """
     args = build_parser().parse_args(argv)
 
     prob_rel = max(0.0, min(1.0, float(args.prob_reliable)))
     t = Transport(
-        window=args.win, prob_reliable=prob_rel, sack_enabled=args.sack, verbose=args.verbose
+        window=args.win,
+        prob_reliable=prob_rel,
+        sack_enabled=args.sack,
+        verbose=args.verbose,
     )
     t.connect(args.dst)
 
@@ -94,7 +117,9 @@ def main(argv: list[str] | None = None) -> int:
         try:
             elapsed = max(time.time() - started, 1e-6)
             mbps = (total_queued * 8) / (elapsed * 1_000_000)
-            print(f"[dctp-send] queued {total_queued} bytes in {elapsed:.3f}s  |  {mbps:.2f} Mb/s")
+            print(
+                f"[dctp-send] queued {total_queued} bytes in {elapsed:.3f}s  |  {mbps:.2f} Mb/s"
+            )
 
             stats = t.get_stats()
             link_keys = (
@@ -121,13 +146,14 @@ def main(argv: list[str] | None = None) -> int:
                     parts.append(f"{k}={v}")
                 print(", ".join(parts))
 
-
         except Exception:
             pass
         return 0
 
     else:
-        print("[dctp-send] Error: must specify --num-packets and --rate", file=sys.stderr)
+        print(
+            "[dctp-send] Error: must specify --num-packets and --rate", file=sys.stderr
+        )
         return 1
 
 

@@ -141,8 +141,6 @@ class Sender:
         self.total_packets_received: int = 0
         self.total_bytes_sent: int = 0
 
-
-
     def offer(self, data: bytes) -> int:
         """
         Accept as much as fits the window, segment to MSS, enqueue into inflight.
@@ -220,7 +218,6 @@ class Sender:
             self.total_packets_sent += 1
             self.total_bytes_sent += len(seg.payload)
 
-
             seg.acked = True
             self._print(
                 f"{'RETX' if not first_send else 'TX  '} | ch={seg.chan.name} | "
@@ -228,7 +225,9 @@ class Sender:
             )
 
         # Iterate the reliable channel
-        for seg in sorted(self.inflight[ChannelType.RELIABLE].values(), key=lambda s: s.seq):
+        for seg in sorted(
+            self.inflight[ChannelType.RELIABLE].values(), key=lambda s: s.seq
+        ):
             if seg.acked:
                 continue
 
@@ -311,7 +310,6 @@ class Sender:
 
         self.total_packets_received += len(done)
 
-
     def _ack_up_to(self, up_to: int) -> None:
         """
         Mark all segments with end <= up_to as acked.
@@ -363,8 +361,12 @@ class Sender:
 
                 self.rtt_cnt += 1
                 self.rtt_sum += sample
-                self.rtt_min = sample if self.rtt_min is None else min(self.rtt_min, sample)
-                self.rtt_max = sample if self.rtt_max is None else max(self.rtt_max, sample)
+                self.rtt_min = (
+                    sample if self.rtt_min is None else min(self.rtt_min, sample)
+                )
+                self.rtt_max = (
+                    sample if self.rtt_max is None else max(self.rtt_max, sample)
+                )
                 self._rtt_samples.append(int(sample))
 
                 if self.srtt is None:
@@ -372,7 +374,9 @@ class Sender:
                     self.rttvar = float(sample) / 2.0
                 else:
                     alpha, beta = 1 / 8, 1 / 4
-                    self.rttvar = (1 - beta) * self.rttvar + beta * abs(self.srtt - sample)
+                    self.rttvar = (1 - beta) * self.rttvar + beta * abs(
+                        self.srtt - sample
+                    )
                     self.srtt = (1 - alpha) * self.srtt + alpha * sample
 
                 rto = self.current_rto()
@@ -459,7 +463,9 @@ class Sender:
             "total_packets_received": self.total_packets_received,
             "total_bytes_sent": self.total_bytes_sent,
             "duration_s": round(duration_s, 3),
-            "throughput_bytes_per_sec": round(throughput_bps, 2) if throughput_bps else None,
+            "throughput_bytes_per_sec": (
+                round(throughput_bps, 2) if throughput_bps else None
+            ),
         }
 
     def get_inflight_segments(self) -> List[_Seg]:
